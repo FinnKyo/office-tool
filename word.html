@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>期末论文定制排版工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .preview-container { 
+            background: white; 
+            border: 1px solid #e5e7eb; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
+            padding: 40px; 
+            min-height: 600px; 
+            max-height: 800px;
+            overflow-y: auto;
+        }
+        /* 自定义提示框动画 */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- 左侧：输入区域 -->
+        <div class="flex flex-col gap-4">
+            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">1</span> 
+                粘贴 Markdown 文本
+            </h2>
+            <p class="text-sm text-gray-500 -mt-2">将生成的带有 [注：...] 标记的纯文本直接粘贴在下方：</p>
+            <textarea id="md-input" class="w-full h-[600px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-sm resize-none shadow-inner" placeholder="在此粘贴..."></textarea>
+            <button onclick="formatText()" class="bg-blue-600 text-white py-3 px-6 rounded-lg font-bold hover:bg-blue-700 transition shadow-md flex justify-center items-center gap-2">
+                <span class="bg-white text-blue-600 w-5 h-5 rounded-full flex items-center justify-center text-xs">2</span>
+                一键生成 Word 格式
+            </button>
+        </div>
+
+        <!-- 右侧：输出与复制区域 -->
+        <div class="flex flex-col gap-4">
+            <div class="flex justify-between items-end">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <span class="bg-green-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">3</span>
+                        预览与复制
+                    </h2>
+                </div>
+                <button onclick="copyToWord()" class="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 transition shadow-md flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                    点此复制全文 (直贴Word)
+                </button>
+            </div>
+            
+            <div id="word-preview" class="preview-container rounded-lg">
+                <div id="placeholder-text" class="text-gray-400 text-center mt-32 flex flex-col items-center">
+                    <svg class="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    点击左侧蓝色生成按钮后，<br>这里会出现排版好的富文本内容...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 自定义提示框功能（替代原始 alert）
+        function showToast(message, isError = false) {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-6 right-6 ${isError ? 'bg-red-600' : 'bg-green-600'} text-white px-6 py-4 rounded-lg shadow-2xl font-medium toast-enter z-50 max-w-sm`;
+            toast.innerHTML = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.transition = 'opacity 0.3s ease';
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+
+        // 解析并转换格式
+        function formatText() {
+            const input = document.getElementById('md-input').value;
+            if (!input.trim()) {
+                showToast("⚠️ 请先在左侧输入框粘贴内容！", true);
+                return;
+            }
+
+            const lines = input.split('\n');
+            let html = '';
+            
+            // 完美映射 Word 尺寸和行距的 CSS 字典
+            // 磅数对应：初号42, 一号26, 二号22, 三号16, 小三15, 四号14, 小四12, 五号10.5, 小五9
+            const styles = {
+                title: "text-align:center; font-family:'SimHei', '黑体', sans-serif; font-size:16pt; font-weight:bold; margin-top:0.5em; margin-bottom:0.5em; mso-line-height-rule:exactly; line-height:22pt;",
+                author: "text-align:center; font-family:'SimSun', '宋体', serif; font-size:14pt; margin-top:0; margin-bottom:0; mso-line-height-rule:exactly; line-height:22pt;",
+                abstractTitle: "font-family:'SimHei', '黑体', sans-serif; font-size:10.5pt; font-weight:bold;",
+                abstractContent: "font-family:'KaiTi', '楷体', serif; font-size:10.5pt; margin-top:0; margin-bottom:0; mso-line-height-rule:exactly; line-height:22pt;",
+                h1: "font-family:'SimSun', '宋体', serif; font-size:15pt; font-weight:bold; margin-top:0.5em; margin-bottom:0.5em; mso-line-height-rule:exactly; line-height:22pt;",
+                h2: "font-family:'SimSun', '宋体', serif; font-size:14pt; font-weight:bold; margin-top:0; margin-bottom:0; mso-line-height-rule:exactly; line-height:22pt;",
+                h3: "font-family:'SimSun', '宋体', serif; font-size:12pt; margin-top:0; margin-bottom:0; text-indent:24pt; mso-line-height-rule:exactly; line-height:22pt;",
+                normal: "font-family:'SimSun', '宋体', serif; font-size:12pt; margin-top:0; margin-bottom:0; text-indent:24pt; mso-line-height-rule:exactly; line-height:22pt;",
+                reference: "font-family:'SimSun', '宋体', serif; font-size:9pt; margin-top:0; margin-bottom:0;",
+            };
+
+            let isRefSection = false;
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+                
+                // 1. 忽略空行和带 [注：] 的提示语
+                if (!line || line.startsWith('[注：')) continue;
+
+                // 2. 匹配标题
+                if (line.includes("深层逻辑、核心要义与实践路径") && !line.includes("论文")) {
+                    html += `<div style="${styles.title}">${line}</div>`;
+                } 
+                // 3. 匹配作者和学院信息
+                else if (line === "[学生姓名]" || line.startsWith("（[所在学院]")) {
+                    html += `<div style="${styles.author}">${line}</div>`;
+                }
+                // 4. 匹配摘要和空行
+                else if (line.startsWith("摘要：")) {
+                    let content = line.substring(3);
+                    html += `<div style="${styles.abstractContent}"><span style="${styles.abstractTitle}">摘要：</span>${content}</div>`;
+                }
+                // 5. 匹配关键词
+                else if (line.startsWith("关键词：")) {
+                    let content = line.substring(4);
+                    html += `<div style="${styles.abstractContent}"><br><span style="${styles.abstractTitle}">关键词：</span>${content}</div><br>`; // 关键词后正文空一行
+                }
+                // 6. 一级标题 (匹配“一、”、“二、”或“引言”、“结语”)
+                else if (line.match(/^[一二三四五]、/) || line === "引言" || line === "结语") {
+                    html += `<div style="${styles.h1}">${line}</div>`;
+                }
+                // 7. 二级标题 (匹配“（一）”、“（二）”)
+                else if (line.match(/^（[一二三四五]）/)) {
+                    html += `<div style="${styles.h2}">${line}</div>`;
+                }
+                // 8. 三级标题 (匹配“1.”、“2.”)
+                else if (line.match(/^[1-9]\./)) {
+                    html += `<div style="${styles.h3}">${line}</div>`;
+                }
+                // 9. 参考文献头部
+                else if (line.startsWith("参考文献")) {
+                    isRefSection = true;
+                    html += `<div style="${styles.normal} font-weight:bold; text-indent:0; margin-top:2em;">${line}</div>`;
+                }
+                // 10. 页下注释内容
+                else if (line.match(/^\[[①-⑩]\]/)) {
+                    html += `<div style="${styles.reference}">${line}</div>`;
+                }
+                // 11. 常规正文
+                else {
+                    if (isRefSection) {
+                        html += `<div style="${styles.reference}">${line}</div>`;
+                    } else {
+                        html += `<div style="${styles.normal}">${line}</div>`;
+                    }
+                }
+            }
+            
+            document.getElementById('word-preview').innerHTML = html;
+            showToast("✅ 排版生成成功！请点击右侧绿色按钮复制。");
+        }
+
+        // 复制富文本内容
+        function copyToWord() {
+            const preview = document.getElementById('word-preview');
+            const placeholder = document.getElementById('placeholder-text');
+            
+            if (placeholder) {
+                showToast("⚠️ 请先点击左侧的【一键生成 Word 格式】按钮！", true);
+                return;
+            }
+            
+            const range = document.createRange();
+            range.selectNodeContents(preview);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            
+            try {
+                document.execCommand('copy');
+                showToast("🎉 <b>复制成功！</b><br><br>现在请打开空白 Word 文档：<br>1. 按 <b>Ctrl + V</b> 直接粘贴<br>2. 默认会保留所有字体、字号与22磅行距。<br><br><span class='text-sm opacity-80'>注：尾部脚注仍需手动点击 Word 的“插入脚注”功能。</span>");
+            } catch (err) {
+                showToast("⚠️ 自动复制失败，请在预览区手动全选 (Ctrl+A) 然后复制 (Ctrl+C)。", true);
+            }
+            selection.removeAllRanges(); // 复制完取消选中状态，保持美观
+        }
+    </script>
+</body>
+</html>
